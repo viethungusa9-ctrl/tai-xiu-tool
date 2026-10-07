@@ -138,7 +138,7 @@ st.dataframe(
         "Xác suất thực nghiệm": "{:.2%}",
         "Xác suất lý thuyết": "{:.2%}",
         "Chênh lệch": "{:+.2%}"
-    }).background_gradient(subset=["Chênh lệch"], cmap="RdYlGn_r"),
+    }),
     use_container_width=True,
     height=500
 )
