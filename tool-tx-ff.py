@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 from collections import Counter
 import plotly.graph_objects as go
-import plotly.express as px
 
 st.set_page_config(
     page_title="Tài Xỉu - Tổng điểm 3-18",
@@ -12,9 +11,8 @@ st.set_page_config(
 )
 
 st.title("🎲 Tài Xỉu Analyzer – Tổng điểm (3–18)")
-st.caption("Phiên bản nhẹ – Không dùng LSTM – Chạy tốt trên Android (Termux)")
+st.caption("Hỗ trợ cập nhật phiên liên tục + Gợi ý thống kê")
 
-# ====================== XÁC SUẤT LÝ THUYẾT ======================
 @st.cache_data
 def theoretical_distribution():
     ways = {i: 0 for i in range(3, 19)}
@@ -28,58 +26,74 @@ def theoretical_distribution():
 
 theo_ways, theo_probs = theoretical_distribution()
 
-# ====================== SIDEBAR ======================
+if "history" not in st.session_state:
+    st.session_state.history = []
+
 with st.sidebar:
     st.header("📥 Nhập dữ liệu")
-    input_method = st.radio(
-        "Cách nhập:",
-        ["Nhập tay (tổng điểm)", "Upload CSV", "Dữ liệu giả lập"]
+
+    st.subheader("Thêm phiên mới")
+    new_total = st.number_input(
+        "Tổng điểm phiên mới (3-18):",
+        min_value=3,
+        max_value=18,
+        value=10,
+        step=1
     )
+    col_add, col_clear = st.columns(2)
+    with col_add:
+        if st.button("➕ Thêm phiên", use_container_width=True):
+            st.session_state.history.append(int(new_total))
+            st.rerun()
+    with col_clear:
+        if st.button("🗑️ Xóa hết", use_container_width=True):
+            st.session_state.history = []
+            st.rerun()
 
-    history = []
+    st.divider()
+    st.subheader("Hoặc nhập hàng loạt")
+    input_method = st.radio("Cách nhập:", ["Nhập tay", "Upload CSV", "Dữ liệu giả lập"])
 
-    if input_method == "Nhập tay (tổng điểm)":
-        raw = st.text_area(
-            "Nhập các tổng điểm (3-18), cách nhau bởi dấu cách hoặc xuống dòng:",
-            value="10 12 8 14 9 11 7 13 10 15 6 12 9 11 8 14 10 13 7 12 11 9 16 8 10",
-            height=150
-        )
-        try:
-            history = [int(x.strip()) for x in raw.replace("\n", " ").split() if x.strip()]
-            history = [x for x in history if 3 <= x <= 18]
-        except:
-            st.error("Chỉ được nhập số nguyên từ 3 đến 18")
-            history = []
+    if input_method == "Nhập tay":
+        raw = st.text_area("Nhập các tổng điểm (3-18):", height=100)
+        if st.button("Cập nhật từ ô nhập tay"):
+            try:
+                new_list = [int(x.strip()) for x in raw.replace("\n", " ").split() if x.strip()]
+                new_list = [x for x in new_list if 3 <= x <= 18]
+                st.session_state.history = new_list
+                st.rerun()
+            except:
+                st.error("Chỉ nhập số từ 3 đến 18")
 
     elif input_method == "Upload CSV":
-        file = st.file_uploader("Upload file CSV (cột tên 'total')", type=["csv"])
-        if file is not None:
+        file = st.file_uploader("Upload CSV (cột total)", type=["csv"])
+        if file and st.button("Tải từ CSV"):
             try:
                 df = pd.read_csv(file)
                 if "total" in df.columns:
-                    history = df["total"].dropna().astype(int).tolist()
-                    history = [x for x in history if 3 <= x <= 18]
-                else:
-                    st.error("File phải có cột tên 'total'")
+                    new_list = [x for x in df["total"].dropna().astype(int).tolist() if 3 <= x <= 18]
+                    st.session_state.history = new_list
+                    st.rerun()
             except Exception as e:
-                st.error(f"Lỗi đọc file: {e}")
+                st.error(f"Lỗi: {e}")
 
     else:
         n = st.slider("Số phiên giả lập", 50, 1000, 200)
-        sums = list(range(3, 19))
-        probs = [theo_probs[s] for s in sums]
-        history = np.random.choice(sums, size=n, p=probs).tolist()
-        st.success(f"Đã tạo {n} phiên theo đúng xác suất lý thuyết")
+        if st.button("Tạo dữ liệu giả lập"):
+            sums = list(range(3, 19))
+            probs = [theo_probs[s] for s in sums]
+            st.session_state.history = np.random.choice(sums, size=n, p=probs).tolist()
+            st.rerun()
 
-# ====================== PHÂN TÍCH ======================
+history = st.session_state.history
+
 if not history:
-    st.info("👈 Hãy nhập dữ liệu ở sidebar bên trái để bắt đầu")
+    st.info("👈 Hãy thêm phiên mới ở sidebar để bắt đầu")
     st.stop()
 
 n = len(history)
 cnt = Counter(history)
 
-# Tạo bảng phân bố
 df_dist = pd.DataFrame({
     "Tổng": list(range(3, 19)),
     "Số lần": [cnt.get(i, 0) for i in range(3, 19)],
@@ -89,22 +103,56 @@ df_dist = pd.DataFrame({
 })
 df_dist["Chênh lệch"] = df_dist["Xác suất thực nghiệm"] - df_dist["Xác suất lý thuyết"]
 
-# Tài / Xỉu
 xiu_count = sum(cnt.get(i, 0) for i in range(3, 11))
 tai_count = sum(cnt.get(i, 0) for i in range(11, 19))
 
-# Metrics
 col1, col2, col3, col4 = st.columns(4)
 col1.metric("Tổng số phiên", n)
 col2.metric("Xỉu (3-10)", f"{xiu_count} ({xiu_count/n:.1%})")
 col3.metric("Tài (11-18)", f"{tai_count} ({tai_count/n:.1%})")
 most_common = cnt.most_common(1)[0]
-col4.metric("Tổng xuất hiện nhiều nhất", f"{most_common[0]} ({most_common[1]} lần)")
+col4.metric("Tổng nhiều nhất", f"{most_common[0]} ({most_common[1]} lần)")
 
 st.divider()
 
-# ====================== BIỂU ĐỒ ======================
-st.subheader("📊 Phân bố tổng điểm (Thực nghiệm vs Lý thuyết)")
+# ====================== GỢI Ý THỐNG KÊ ======================
+st.subheader("🎯 Gợi ý thống kê phiên tiếp theo")
+
+# Tìm các tổng đang ra ít hơn lý thuyết nhiều nhất
+df_dist["Độ lệch"] = df_dist["Chênh lệch"]
+under = df_dist.nsmallest(3, "Độ lệch")["Tổng"].tolist()
+
+# Chuỗi hiện tại
+current = history[-1]
+streak = 1
+for i in range(n-2, -1, -1):
+    if history[i] == current:
+        streak += 1
+    else:
+        break
+
+# Gợi ý đơn giản
+goi_y = []
+goi_y.append(f"Các tổng đang ra **ít hơn lý thuyết** nhiều nhất: {under}")
+if streak >= 3:
+    goi_y.append(f"Chuỗi **{current}** đang dài ({streak} lần) → thống kê thường hay đảo chiều")
+else:
+    goi_y.append(f"Chuỗi **{current}** còn ngắn ({streak} lần)")
+
+# Tài / Xỉu
+if xiu_count > tai_count:
+    goi_y.append("Xỉu đang nhiều hơn Tài → gợi ý nghiêng về **Tài**")
+else:
+    goi_y.append("Tài đang nhiều hơn Xỉu → gợi ý nghiêng về **Xỉu**")
+
+for g in goi_y:
+    st.write("• " + g)
+
+st.warning("⚠️ Đây chỉ là gợi ý dựa trên thống kê quá khứ. Tài Xỉu là ngẫu nhiên, không có quy luật để đoán chính xác.")
+
+st.divider()
+
+st.subheader("📊 Phân bố tổng điểm")
 
 fig = go.Figure()
 fig.add_trace(go.Bar(
@@ -118,54 +166,27 @@ fig.add_trace(go.Scatter(
     y=df_dist["Xác suất lý thuyết"],
     name="Lý thuyết",
     mode="lines+markers",
-    line=dict(color="#ef4444", width=3),
-    marker=dict(size=8)
+    line=dict(color="#ef4444", width=3)
 ))
-fig.update_layout(
-    xaxis_title="Tổng điểm",
-    yaxis_title="Xác suất",
-    height=420,
-    legend=dict(orientation="h", yanchor="bottom", y=1.02),
-    margin=dict(t=40, b=40)
-)
+fig.update_layout(height=400, margin=dict(t=30, b=30))
 st.plotly_chart(fig, use_container_width=True)
 
-# ====================== BẢNG CHI TIẾT ======================
-st.subheader("📋 Bảng thống kê chi tiết")
+st.subheader("📋 Bảng thống kê")
 
 st.dataframe(
-    df_dist.style.format({
+    df_dist[["Tổng", "Số lần", "Xác suất thực nghiệm", "Xác suất lý thuyết", "Chênh lệch"]].style.format({
         "Xác suất thực nghiệm": "{:.2%}",
         "Xác suất lý thuyết": "{:.2%}",
         "Chênh lệch": "{:+.2%}"
     }),
     use_container_width=True,
-    height=500
+    height=450
 )
 
-# ====================== CHUỖI & THÔNG TIN THÊM ======================
 st.subheader("📈 Thông tin thêm")
-
-current = history[-1]
-streak = 1
-for i in range(n - 2, -1, -1):
-    if history[i] == current:
-        streak += 1
-    else:
-        break
-
 col_a, col_b = st.columns(2)
 with col_a:
-    st.write(f"**Chuỗi hiện tại:** Tổng **{current}** đang ra liên tiếp **{streak}** lần")
+    st.write(f"**Chuỗi hiện tại:** {current} × {streak}")
 with col_b:
     recent_10 = history[-10:] if n >= 10 else history
-    recent_cnt = Counter(recent_10)
-    st.write(f"**10 phiên gần nhất:** {dict(recent_cnt)}")
-
-st.divider()
-st.markdown("""
-**Ghi chú:**
-- Cột **Chênh lệch** dương = tổng đó đang ra nhiều hơn lý thuyết.
-- Cột **Chênh lệch** âm = tổng đó đang ra ít hơn lý thuyết.
-- Tool này chỉ mang tính thống kê, không có khả năng dự đoán chính xác tương lai.
-""")
+    st.write(f"**10 phiên gần nhất:** {dict(Counter(recent_10))}")
