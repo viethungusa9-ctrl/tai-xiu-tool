@@ -139,8 +139,8 @@ col_s1, col_s2 = st.columns(2)
 col_s1.info(f"**Chuỗi tổng điểm:** {cur_total} đang ra liên tiếp **{streak_total}** lần")
 col_s2.info(f"**Chuỗi Tài/Xỉu:** {cur_tx} đang ra liên tiếp **{streak_tx}** lần")
 
-# ====================== GỢI Ý ĐA PHƯƠNG PHÁP ======================
-st.subheader("🎯 Gợi ý thống kê phiên tiếp theo (đa phương pháp)")
+# ====================== GỢI Ý ĐA PHƯƠNG PHÁP + CẢNH BÁO ======================
+st.subheader("🎯 Gợi ý thống kê phiên tiếp theo")
 
 df_dist = pd.DataFrame({
     "Tổng": list(range(3, 19)),
@@ -153,15 +153,31 @@ df_dist["Chênh lệch"] = df_dist["Thực nghiệm"] - df_dist["Lý thuyết"]
 under = df_dist.nsmallest(3, "Chênh lệch")["Tổng"].tolist()
 over = df_dist.nlargest(3, "Chênh lệch")["Tổng"].tolist()
 
+# ---- CẢNH BÁO CHUỖI CAO ----
+cur_total, streak_total = get_streak(history)
+tx_history = ["Xỉu" if x <= 10 else "Tài" for x in history]
+cur_tx, streak_tx = get_streak(tx_history)
+
+# Kiểm tra cặp giống nhau liên tiếp (ví dụ 9-9, 10-10...)
+same_pair = False
+if n >= 2 and history[-1] == history[-2]:
+    same_pair = True
+
+# Hiển thị cảnh báo mạnh
+if streak_total >= 3 or same_pair:
+    st.error(f"⚠️ CẢNH BÁO CHUỖI CAO: Tổng **{cur_total}** đang ra liên tiếp **{streak_total}** lần")
+    if same_pair:
+        st.error(f"⚠️ Vừa xuất hiện cặp giống nhau **{history[-2]}-{history[-1]}** → Thống kê thường dễ bị bẻ ở nhịp tiếp theo")
+    st.error("→ Khả năng đảo chiều ở phiên tới **cao hơn bình thường** (chỉ mang tính tham khảo)")
+
+if streak_tx >= 3:
+    opposite = "Tài" if cur_tx == "Xỉu" else "Xỉu"
+    st.warning(f"Chuỗi **{cur_tx}** đã kéo dài {streak_tx} lần → Gợi ý nghiêng về **{opposite}**")
+
+# Các gợi ý khác
 goi_y = []
 goi_y.append(f"**Mean-reversion:** Các tổng đang thấp hơn lý thuyết nhiều nhất → {under}")
 goi_y.append(f"**Đang cao hơn lý thuyết:** {over}")
-
-if streak_total >= 3:
-    goi_y.append(f"**Đảo chuỗi tổng:** {cur_total} đã {streak_total} lần → khả năng đảo cao")
-if streak_tx >= 3:
-    opposite = "Tài" if cur_tx == "Xỉu" else "Xỉu"
-    goi_y.append(f"**Đảo chuỗi Tài/Xỉu:** {cur_tx} đã {streak_tx} lần → gợi ý nghiêng **{opposite}**")
 
 if r_xiu > r_tai + 3:
     goi_y.append("**Cửa sổ gần:** Xỉu đang chiếm ưu thế → gợi ý nghiêng Tài")
@@ -171,8 +187,7 @@ elif r_tai > r_xiu + 3:
 for g in goi_y:
     st.markdown(f"• {g}")
 
-st.warning("⚠️ Tất cả chỉ là gợi ý thống kê. Tài Xỉu là ngẫu nhiên, không tồn tại quy luật để đoán chính xác.")
-
+st.info("Tất cả chỉ là gợi ý thống kê dựa trên dữ liệu quá khứ. Không có độ chính xác đảm bảo.")
 # ====================== XÁC SUẤT CÓ ĐIỀU KIỆN ======================
 st.subheader("📉 Xác suất có điều kiện (sau tổng hiện tại)")
 
